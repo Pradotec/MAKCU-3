@@ -11,63 +11,6 @@ EspUsbHost::HIDReportDescriptor EspUsbHost::HIDReportDesc = {};
 void flashLED();
 
 
-void usbLibraryTask(void *arg)
-{
-    EspUsbHost *instance = static_cast<EspUsbHost *>(arg);
-
-    while (true)
-    {
-        uint32_t event_flags;
-        esp_err_t err = usb_host_lib_handle_events(portMAX_DELAY, &event_flags);
-
-        if (err != ESP_OK)
-        {
-            ESP_LOGE("EspUsbHost", "usb_host_lib_handle_events() err=%x", err);
-            continue;
-        }
-
-        if (instance->clientHandle == NULL || !instance->isClientRegistering)
-        {
-            ESP_LOGI("EspUsbHost", "Registering client...");
-            const usb_host_client_config_t client_config = {
-                .max_num_event_msg = 10,
-                .async = {
-                    .client_event_callback = instance->_clientEventCallback,
-                    .callback_arg = instance,
-                }};
-
-            err = usb_host_client_register(&client_config, &instance->clientHandle);
-            ESP_LOGI("EspUsbHost", "usb_host_client_register() status: %d", err);
-            if (err != ESP_OK)
-            {
-                ESP_LOGW("EspUsbHost", "Failed to re-register client, retrying...");
-                vTaskDelay(100);
-            }
-            else
-            {
-                ESP_LOGI("EspUsbHost", "Client registered successfully.");
-                instance->isClientRegistering = true;
-            }
-        }
-    }
-}
-
-void usbClientTask(void *arg)
-{
-    EspUsbHost *instance = static_cast<EspUsbHost *>(arg);
-
-    while (true)
-    {
-        if (!instance->isClientRegistering)
-        {
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
-        }
-        usb_host_client_handle_events(instance->clientHandle, portMAX_DELAY);
-    }
-}
-
-
 
 void EspUsbHost::get_device_status()
 {
@@ -642,6 +585,7 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
         usbHost->isReady = false;
         EspUsbHost::deviceConnected = false;
         deviceMouseReady = false;
+        usbHost->mouseEndpointNum = 0xFF;
 
         ESP_LOGI("EspUsbHost", "Notifying cleanup task...");
         xTaskNotifyGive(usbHost->cleanupTaskHandle); // Notify the cleanup task to start the process
@@ -774,15 +718,28 @@ void EspUsbHost::_onReceiveControl(usb_transfer_t *transfer)
 
     HIDReportDescriptor descriptor = usbHost->parseHIDReportDescriptor(&transfer->data_buffer[8], transfer->actual_num_bytes - 8);
 
+    for (int i = 0; i < 16; i++)
+    {
+        if (usbHost->endpoint_data_list[i].bInterfaceClass == USB_CLASS_HID &&
+            (usbHost->endpoint_data_list[i].bInterfaceProtocol == HID_ITF_PROTOCOL_MOUSE ||
+             descriptor.xAxisSize > 0))
+        {
+            usbHost->mouseEndpointNum = i;
+            ESP_LOGI("EspUsbHost", "Mouse endpoint cached at index %d (protocol=%d, xAxisSize=%d)",
+                     i, usbHost->endpoint_data_list[i].bInterfaceProtocol, descriptor.xAxisSize);
+            break;
+        }
+    }
+
     usb_host_transfer_free(transfer);
 }
 
 
 void EspUsbHost::onMouse(hid_mouse_report_t report, uint8_t last_buttons)
 {
-    ESP_LOGI("EspUsbHost", "Mouse event detected");
+    if (!debugModeActive) return;
 
-    ESP_LOGD("EspUsbHost", 
+    ESP_LOGD("EspUsbHost",
              "Mouse State: last_buttons=0x%02x(%c%c%c%c%c), buttons=0x%02x(%c%c%c%c%c), x=%d, y=%d, wheel=%d",
              last_buttons,
              (last_buttons & MOUSE_BUTTON_LEFT) ? 'L' : ' ',
@@ -807,59 +764,29 @@ void EspUsbHost::onMouseButtons(hid_mouse_report_t report, uint8_t last_buttons)
     if (deviceMouseReady)
     {
         if (!(last_buttons & MOUSE_BUTTON_LEFT) && (report.buttons & MOUSE_BUTTON_LEFT))
-        {
             serial1Send("km.left(1)\n");
-            ESP_LOGI("EspUsbHost", "Left mouse button pressed");
-        }
         if ((last_buttons & MOUSE_BUTTON_LEFT) && !(report.buttons & MOUSE_BUTTON_LEFT))
-        {
             serial1Send("km.left(0)\n");
-            ESP_LOGI("EspUsbHost", "Left mouse button released");
-        }
 
         if (!(last_buttons & MOUSE_BUTTON_RIGHT) && (report.buttons & MOUSE_BUTTON_RIGHT))
-        {
             serial1Send("km.right(1)\n");
-            ESP_LOGI("EspUsbHost", "Right mouse button pressed");
-        }
         if ((last_buttons & MOUSE_BUTTON_RIGHT) && !(report.buttons & MOUSE_BUTTON_RIGHT))
-        {
             serial1Send("km.right(0)\n");
-            ESP_LOGI("EspUsbHost", "Right mouse button released");
-        }
 
         if (!(last_buttons & MOUSE_BUTTON_MIDDLE) && (report.buttons & MOUSE_BUTTON_MIDDLE))
-        {
             serial1Send("km.middle(1)\n");
-            ESP_LOGI("EspUsbHost", "Middle mouse button pressed");
-        }
         if ((last_buttons & MOUSE_BUTTON_MIDDLE) && !(report.buttons & MOUSE_BUTTON_MIDDLE))
-        {
             serial1Send("km.middle(0)\n");
-            ESP_LOGI("EspUsbHost", "Middle mouse button released");
-        }
 
         if (!(last_buttons & MOUSE_BUTTON_FORWARD) && (report.buttons & MOUSE_BUTTON_FORWARD))
-        {
             serial1Send("km.side1(1)\n");
-            ESP_LOGI("EspUsbHost", "Forward mouse button pressed");
-        }
         if ((last_buttons & MOUSE_BUTTON_FORWARD) && !(report.buttons & MOUSE_BUTTON_FORWARD))
-        {
             serial1Send("km.side1(0)\n");
-            ESP_LOGI("EspUsbHost", "Forward mouse button released");
-        }
 
         if (!(last_buttons & MOUSE_BUTTON_BACKWARD) && (report.buttons & MOUSE_BUTTON_BACKWARD))
-        {
             serial1Send("km.side2(1)\n");
-            ESP_LOGI("EspUsbHost", "Backward mouse button pressed");
-        }
         if ((last_buttons & MOUSE_BUTTON_BACKWARD) && !(report.buttons & MOUSE_BUTTON_BACKWARD))
-        {
             serial1Send("km.side2(0)\n");
-            ESP_LOGI("EspUsbHost", "Backward mouse button released");
-        }
     }
 }
 
@@ -869,15 +796,9 @@ void EspUsbHost::onMouseMove(hid_mouse_report_t report)
     if (deviceMouseReady)
     {
         if (report.wheel != 0)
-        {
             serial1Send("km.wheel(%d)\n", report.wheel);
-            ESP_LOGI("EspUsbHost", "Mouse wheel moved, value=%d", report.wheel);
-        }
         else
-        {
             serial1Send("km.move(%d,%d)\n", report.x, report.y);
-            ESP_LOGI("EspUsbHost", "Mouse moved, x=%d, y=%d", report.x, report.y);
-        }
     }
 }
 
@@ -892,15 +813,17 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         return;
     }
 
-    static unsigned long lastLogTime = 0;
-    unsigned long currentTime = millis();
-    if (currentTime - lastLogTime >= 250)
+    if (usbHost->debugModeActive)
     {
-        usbHost->logRawBytes("EspUsbHost::_onReceive", transfer->data_buffer, transfer->actual_num_bytes);
-        lastLogTime = currentTime;
+        static unsigned long lastLogTime = 0;
+        unsigned long currentTime = millis();
+        if (currentTime - lastLogTime >= 250)
+        {
+            usbHost->logRawBytes("EspUsbHost::_onReceive", transfer->data_buffer, transfer->actual_num_bytes);
+            lastLogTime = currentTime;
+        }
     }
 
-    uint8_t endpoint_num = transfer->bEndpointAddress & 0x0F;
     bool has_data = (transfer->actual_num_bytes > 0);
 
     if (has_data)
@@ -913,74 +836,76 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         flashLED();
     }
 
-    ESP_LOGI("EspUsbHost", "Received HID report: %d bytes", transfer->actual_num_bytes);
-
-     usbHost->logRawBytes("EspUsbHost::_onReceive HID Report", transfer->data_buffer, transfer->actual_num_bytes);
-
-    // Process the HID report if it's a mouse report
-    for (int i = 0; i < 16; i++)
+    if (usbHost->debugModeActive)
     {
-        if (usbHost->endpoint_data_list[i].bInterfaceClass == USB_CLASS_HID)
+        ESP_LOGI("EspUsbHost", "Received HID report: %d bytes", transfer->actual_num_bytes);
+        usbHost->logRawBytes("EspUsbHost::_onReceive HID Report", transfer->data_buffer, transfer->actual_num_bytes);
+    }
+
+    if (usbHost->mouseEndpointNum != 0xFF && has_data)
+    {
+        static uint8_t last_buttons = 0;
+        hid_mouse_report_t report = {};
+        report.buttons = transfer->data_buffer[usbHost->HIDReportDesc.buttonStartByte];
+
+        if (usbHost->HIDReportDesc.xAxisSize == 12 && usbHost->HIDReportDesc.yAxisSize == 12)
         {
-            if (usbHost->endpoint_data_list[i].bInterfaceSubClass == HID_SUBCLASS_BOOT &&
-                usbHost->endpoint_data_list[i].bInterfaceProtocol == HID_ITF_PROTOCOL_MOUSE)
-            {
-                static uint8_t last_buttons = 0;
-                hid_mouse_report_t report = {};
-                report.buttons = transfer->data_buffer[usbHost->HIDReportDesc.buttonStartByte];
+            uint8_t xyOffset = usbHost->HIDReportDesc.xAxisStartByte;
+            int16_t xValue = (transfer->data_buffer[xyOffset]) |
+                             ((transfer->data_buffer[xyOffset + 1] & 0x0F) << 8);
+            int16_t yValue = ((transfer->data_buffer[xyOffset + 1] >> 4) & 0x0F) |
+                             (transfer->data_buffer[xyOffset + 2] << 4);
+            if (xValue & 0x800) xValue |= 0xF000;
+            if (yValue & 0x800) yValue |= 0xF000;
 
-                if (usbHost->HIDReportDesc.xAxisSize == 12 && usbHost->HIDReportDesc.yAxisSize == 12)
-                {
-                    uint8_t xyOffset = usbHost->HIDReportDesc.xAxisStartByte;
-                    int16_t xValue = (transfer->data_buffer[xyOffset]) |
-                                     ((transfer->data_buffer[xyOffset + 1] & 0x0F) << 8);
-                    int16_t yValue = ((transfer->data_buffer[xyOffset + 1] >> 4) & 0x0F) |
-                                     (transfer->data_buffer[xyOffset + 2] << 4);
+            report.x = xValue;
+            report.y = yValue;
+            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
+            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+        }
+        else if (usbHost->HIDReportDesc.xAxisSize == 16 && usbHost->HIDReportDesc.yAxisSize == 16)
+        {
+            uint8_t xOffset = usbHost->HIDReportDesc.xAxisStartByte;
+            uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
+            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
 
-                    report.x = xValue;
-                    report.y = yValue;
-                    uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
-                    report.wheel = transfer->data_buffer[wheelOffset];
-                }
-                else
-                {
-                    uint8_t xOffset = usbHost->HIDReportDesc.xAxisStartByte;
-                    uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
-                    uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
+            report.x = (int16_t)(transfer->data_buffer[xOffset] | (transfer->data_buffer[xOffset + 1] << 8));
+            report.y = (int16_t)(transfer->data_buffer[yOffset] | (transfer->data_buffer[yOffset + 1] << 8));
+            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+        }
+        else
+        {
+            uint8_t xOffset = usbHost->HIDReportDesc.xAxisStartByte;
+            uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
+            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
 
-                    report.x = transfer->data_buffer[xOffset];
-                    report.y = transfer->data_buffer[yOffset];
-                    report.wheel = transfer->data_buffer[wheelOffset];
-                }
+            report.x = (int8_t)transfer->data_buffer[xOffset];
+            report.y = (int8_t)transfer->data_buffer[yOffset];
+            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+        }
 
-                usbHost->onMouse(report, last_buttons);
-                if (report.buttons != last_buttons)
-                {
-                    usbHost->onMouseButtons(report, last_buttons);
-                    last_buttons = report.buttons;
-                }
-                if (report.x != 0 || report.y != 0 || report.wheel != 0)
-                {
-                    usbHost->onMouseMove(report);
-                }
-            }
+        usbHost->onMouse(report, last_buttons);
+        if (report.buttons != last_buttons)
+        {
+            usbHost->onMouseButtons(report, last_buttons);
+            last_buttons = report.buttons;
+        }
+        if (report.x != 0 || report.y != 0 || report.wheel != 0)
+        {
+            usbHost->onMouseMove(report);
         }
     }
 
-    // Handle transfer status
-    switch (transfer->status)
+    if (transfer->status != USB_TRANSFER_STATUS_COMPLETED)
     {
-    case USB_TRANSFER_STATUS_COMPLETED:
-        ESP_LOGI("EspUsbHost", "Transfer completed successfully: Endpoint=0x%x", transfer->bEndpointAddress);
-        break;
-
-    case USB_TRANSFER_STATUS_STALL:
-        ESP_LOGW("EspUsbHost", "Transfer STALL received: Endpoint=0x%x", transfer->bEndpointAddress);
-        break;
-
-    default:
-        ESP_LOGE("EspUsbHost", "Transfer error or incomplete: Status=0x%x, Endpoint=0x%x", transfer->status, transfer->bEndpointAddress);
-        break;
+        if (transfer->status == USB_TRANSFER_STATUS_STALL)
+        {
+            ESP_LOGW("EspUsbHost", "Transfer STALL: Endpoint=0x%x", transfer->bEndpointAddress);
+        }
+        else
+        {
+            ESP_LOGE("EspUsbHost", "Transfer error: Status=0x%x, Endpoint=0x%x", transfer->status, transfer->bEndpointAddress);
+        }
     }
 
     // Resubmit the transfer if the device is not suspended

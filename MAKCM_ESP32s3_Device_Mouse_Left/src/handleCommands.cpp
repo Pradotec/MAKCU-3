@@ -34,8 +34,6 @@ bool processingUsbCommands = false;
 
 
 
-// Create the ring buffers
-void processRingBufferCommand(RingBuf<char, 620> &buffer);
 RingBuf<char, 620> serial0RingBuffer;
 RingBuf<char, 620> serial1RingBuffer;
 int currentCommandIndex = 0;
@@ -184,43 +182,11 @@ void serial1RX() {
 }
 
 
-void processRingBufferCommand(RingBuf<char, 620> &buffer) {
-    char commandBuffer[620];
-    int commandIndex = 0;
-    char byte;
-
-    while (!buffer.isEmpty()) {
-        buffer.pop(byte);
-        
-        Serial0.print("Popped Byte: '");
-        Serial0.print(byte);
-        Serial0.print("' (ASCII: ");
-        Serial0.print((int)byte); 
-       
-        if (byte == '\n' || commandIndex >= 620 - 1) {
-            break;
-        }
-
-        commandBuffer[commandIndex++] = byte;
-    }
-
-    commandBuffer[commandIndex] = '\0'; 
-    trimCommand(commandBuffer);
-    
-    Serial0.print("Full Command: ");
-    Serial0.println(commandBuffer);
-
-    if (commandIndex > 0) {
-        processCommand(commandBuffer);
-    }
-}
-
 
 void handleKmMoveCommand(const char *command) {
-    int x, y;
-
-    sscanf(command + strlen("km.move") + 1, "%d,%d", &x, &y);
-
+    int x = 0, y = 0;
+    const char *params = command + 8;
+    if (sscanf(params, "%d,%d", &x, &y) == 2)
     {
         std::lock_guard<std::mutex> lock(commandMutex);
         moveX = x;
@@ -397,9 +363,9 @@ void mouseMoveTask(void *pvParameters) {
 }
 
 void handleKmMoveto(const char *command) {
-    int x, y;
-    sscanf(command + strlen("km.moveto") + 1, "%d,%d", &x, &y);
-    handleMoveto(x, y);
+    int x = 0, y = 0;
+    if (sscanf(command + 10, "%d,%d", &x, &y) == 2)
+        handleMoveto(x, y);
 }
 
 void handleKmGetpos(const char *command) {
@@ -467,9 +433,9 @@ void handleKmMouseButtonBackward0(const char *command) {
 }
 
 void handleKmWheel(const char *command) {
-    int wheelMovement;
-    sscanf(command + strlen("km.wheel") + 1, "%d", &wheelMovement);
-    handleMouseWheel(wheelMovement);
+    int wheelMovement = 0;
+    if (sscanf(command + 9, "%d", &wheelMovement) == 1)
+        handleMouseWheel(wheelMovement);
 }
 
 void handleMove(int x, int y) {

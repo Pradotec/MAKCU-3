@@ -34,7 +34,8 @@
 void flashLEDToggleTask(void *parameter);
 extern SemaphoreHandle_t ledSemaphore;
 
-extern RingBuf<char, 512> rxBuffer;    // RX Buffer for incoming data
+extern RingBuf<char, 512> rxBuffer0;
+extern RingBuf<char, 512> rxBuffer1;
 
 class EspUsbHost
 {
@@ -42,8 +43,9 @@ public:
     // Debug and Log
     bool debugModeActive = false;
     bool isReady = false;
-    static bool deviceMouseReady;;
+    static bool deviceMouseReady;
     uint8_t interval;
+    uint8_t mouseEndpointNum = 0xFF;
     bool isClientRegistering = false;
     bool deviceSuspended = false;
     static bool deviceConnected;

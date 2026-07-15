@@ -3,14 +3,29 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
-// Buffers defined here
-RingBuf<char, 512> rxBuffer;
-RingBuf<char, 512> txBuffer;
+RingBuf<char, 512> rxBuffer0;
+RingBuf<char, 512> rxBuffer1;
 SemaphoreHandle_t ledSemaphore;
 TaskHandle_t cleanupTaskHandle = NULL;
-TaskHandle_t rxSerialTaskHandle;
+TaskHandle_t rxSerial0TaskHandle = NULL;
+TaskHandle_t rxSerial1TaskHandle = NULL;
+
 #define USB_TASK_PRIORITY 1
 #define CLIENT_TASK_PRIORITY 2
+
+static void IRAM_ATTR serial0ISR()
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxSerial0TaskHandle, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+}
+
+static void IRAM_ATTR serial1ISR()
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(rxSerial1TaskHandle, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+}
 
 void EspUsbHost::begin(void)
 {
@@ -26,38 +41,41 @@ void EspUsbHost::begin(void)
 
     ledSemaphore = xSemaphoreCreateBinary();
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->receiveSerial0(arg); 
-    }, "RxTaskSerial0", 4096, this, 5, &rxSerialTaskHandle) != pdPASS) {
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->receiveSerial0(arg);
+    }, "RxTaskSerial0", 4096, this, 5, &rxSerial0TaskHandle) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create RxTaskSerial0.");
     }
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->receiveSerial1(arg); 
-    }, "RxTaskSerial1", 4096, this, 5, NULL) != pdPASS) {
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->receiveSerial1(arg);
+    }, "RxTaskSerial1", 4096, this, 5, &rxSerial1TaskHandle) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create RxTaskSerial1.");
     }
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->usbLibraryTask(arg); 
+    Serial0.onReceive(serial0ISR);
+    Serial1.onReceive(serial1ISR);
+
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->usbLibraryTask(arg);
     }, "usbLibTask", 4096, this, USB_TASK_PRIORITY, NULL) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create usbLibTask.");
     }
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->usbClientTask(arg); 
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->usbClientTask(arg);
     }, "usbClientTask", 4096, this, CLIENT_TASK_PRIORITY, NULL) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create usbClientTask.");
     }
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->cleanupTask(arg); 
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->cleanupTask(arg);
     }, "CleanupTask", 4096, this, 5, &cleanupTaskHandle) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create CleanupTask.");
     }
 
-    if (xTaskCreate([](void *arg) { 
-        static_cast<EspUsbHost *>(arg)->monitorInactivity(arg); 
+    if (xTaskCreate([](void *arg) {
+        static_cast<EspUsbHost *>(arg)->monitorInactivity(arg);
     }, "MonitorInactivityTask", 3200, this, 3, NULL) != pdPASS) {
         ESP_LOGE("EspUsbHost", "Failed to create MonitorInactivityTask.");
     }
@@ -70,17 +88,14 @@ void EspUsbHost::begin(void)
 }
 
 
-
-// combine both maybe mutex?
-
-void handleSerialInput(HardwareSerial &serial, EspUsbHost *instance) {
+static void handleSerialInput(HardwareSerial &serial, RingBuf<char, 512> &buffer, EspUsbHost *instance) {
     while (serial.available() > 0) {
         char byte = serial.read();
 
         if (byte == '\r') continue;
 
-        if (!rxBuffer.isFull()) {
-            rxBuffer.push(byte);
+        if (!buffer.isFull()) {
+            buffer.push(byte);
         } else {
             ESP_LOGW("EspUsbHost", "RX buffer overflow detected.");
             break;
@@ -90,8 +105,8 @@ void handleSerialInput(HardwareSerial &serial, EspUsbHost *instance) {
             char commandBuffer[620];
             int commandIndex = 0;
 
-            while (!rxBuffer.isEmpty() && commandIndex < sizeof(commandBuffer) - 1) {
-                rxBuffer.pop(commandBuffer[commandIndex++]);
+            while (!buffer.isEmpty() && commandIndex < sizeof(commandBuffer) - 1) {
+                buffer.pop(commandBuffer[commandIndex++]);
                 if (commandBuffer[commandIndex - 1] == '\n') break;
             }
 
@@ -110,8 +125,8 @@ void EspUsbHost::receiveSerial0(void *arg)
 {
     EspUsbHost *instance = static_cast<EspUsbHost *>(arg);
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1));                                                               // Set 1ms, be lazy be happy
-        handleSerialInput(Serial0, instance);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        handleSerialInput(Serial0, rxBuffer0, instance);
     }
 }
 
@@ -119,36 +134,27 @@ void EspUsbHost::receiveSerial1(void *arg)
 {
     EspUsbHost *instance = static_cast<EspUsbHost *>(arg);
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(1));                                                              // Set 1ms, be lazy be happy
-        handleSerialInput(Serial1, instance);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        handleSerialInput(Serial1, rxBuffer1, instance);
     }
 }
 
 bool EspUsbHost::serial1Send(const char *format, ...)
 {
-    char logMsg[620];
-
+    char buf[256];
     va_list args;
     va_start(args, format);
-    vsnprintf(logMsg, sizeof(logMsg), format, args);
+    int len = vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    for (int i = 0; i < strlen(logMsg); ++i) {
-        if (!txBuffer.isFull()) {
-            txBuffer.push(logMsg[i]);
-        } else {
-            ESP_LOGW("EspUsbHost", "TX buffer overflow detected.");
-            return false;
-        }
+    if (len > 0 && len < (int)sizeof(buf))
+    {
+        Serial1.write((uint8_t *)buf, len);
+        return true;
     }
 
-    while (!txBuffer.isEmpty()) {
-        char byte;
-        txBuffer.pop(byte);
-        Serial1.write(byte);
-    }
-
-    return true;
+    ESP_LOGW("EspUsbHost", "serial1Send: message truncated or empty (len=%d)", len);
+    return false;
 }
 
 void EspUsbHost::monitorInactivity(void *arg)
