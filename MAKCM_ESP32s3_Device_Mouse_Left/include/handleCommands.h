@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDMouse.h>
+#include <USBHIDKeyboard.h>
 #include "USBSetup.h"
 #include <esp_intr_alloc.h>
 #include <cstring>
@@ -11,6 +12,7 @@
 
 // Extern variables
 extern USBHIDMouse Mouse;
+extern USBHIDKeyboard Keyboard;
 extern TaskHandle_t mouseMoveTaskHandle;
 extern TaskHandle_t ledFlashTaskHandle;
 extern const char *commandQueue[];
@@ -39,6 +41,10 @@ extern std::atomic<bool> isForwardButtonPressed;
 extern std::atomic<bool> isBackwardButtonPressed;
 extern std::atomic<bool> serial0Locked;
 
+// Keyboard state tracking
+extern uint8_t currentKeyboardModifiers;
+extern uint8_t currentKeyboardKeys[6];
+
 // Function declarations
 void handleKmMoveCommand(const char *command);
 void handleDebugcommand(const char *command);
@@ -64,6 +70,13 @@ void handleKmMouseButtonForward0(const char *command);
 void handleKmMouseButtonBackward1(const char *command);
 void handleKmMouseButtonBackward0(const char *command);
 void handleKmWheel(const char *command);
+
+// Keyboard handlers
+void handleKbReport(const char *command);
+void handleKbPress(const char *command);
+void handleKbRelease(const char *command);
+void handleKbReleaseAll(const char *command);
+void handleKbIsDown(const char *command);
 
 void handleUsbHello(const char *command);
 void handleUsbGoodbye(const char *command);

@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDMouse.h>
+#include <USBHIDKeyboard.h>
 #include "handleCommands.h"
 #include "InitSettings.h"
 #include "USBSetup.h"

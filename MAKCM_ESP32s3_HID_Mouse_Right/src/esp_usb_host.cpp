@@ -6,8 +6,11 @@
 #define USB_FEATURE_SELECTOR_REMOTE_WAKEUP 1
 
 bool EspUsbHost::deviceMouseReady = false;
+bool EspUsbHost::deviceKeyboardReady = false;
 bool EspUsbHost::deviceConnected = false;
 EspUsbHost::HIDReportDescriptor EspUsbHost::HIDReportDesc = {};
+uint8_t EspUsbHost::lastKeyboardModifiers = 0;
+uint8_t EspUsbHost::lastKeyboardKeys[6] = {0};
 void flashLED();
 
 
@@ -280,7 +283,8 @@ void EspUsbHost::onConfig(const uint8_t bDescriptorType, const uint8_t *p)
             else
             {
                 ESP_LOGI("EspUsbHost", "usb_host_interface_claim() successful for interface %d", intf->bInterfaceNumber);
-                this->usbInterface[this->usbInterfaceSize] = intf->bInterfaceNumber;
+                this->usbInterface[this->usbInterfaceSize].devHandle = this->deviceHandle;
+                this->usbInterface[this->usbInterfaceSize].ifNum = intf->bInterfaceNumber;
                 this->usbInterfaceSize++;
 
                 currentInterfaceNumber = intf->bInterfaceNumber;
@@ -495,7 +499,11 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
             return;
         }
 
-        ESP_LOGI("EspUsbHost", "Device opened successfully");
+        if (usbHost->openDeviceCount < 2) {
+            usbHost->openDeviceHandles[usbHost->openDeviceCount++] = usbHost->deviceHandle;
+        }
+
+        ESP_LOGI("EspUsbHost", "Device opened successfully (count=%d)", usbHost->openDeviceCount);
 
         usb_device_info_t dev_info;
         err = usb_host_device_info(usbHost->deviceHandle, &dev_info);
@@ -585,7 +593,13 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
         usbHost->isReady = false;
         EspUsbHost::deviceConnected = false;
         deviceMouseReady = false;
+        deviceKeyboardReady = false;
         usbHost->mouseEndpointNum = 0xFF;
+        usbHost->keyboardEndpointNum = 0xFF;
+        usbHost->mouseDeviceHandle = NULL;
+        usbHost->keyboardDeviceHandle = NULL;
+        memset(lastKeyboardKeys, 0, sizeof(lastKeyboardKeys));
+        lastKeyboardModifiers = 0;
 
         ESP_LOGI("EspUsbHost", "Notifying cleanup task...");
         xTaskNotifyGive(usbHost->cleanupTaskHandle); // Notify the cleanup task to start the process
@@ -623,22 +637,27 @@ void EspUsbHost::cleanupTask(void *arg)
         usbHost->usbTransferSize = 0;
 
         for (int i = 0; i < usbHost->usbInterfaceSize; i++) {
-            err = usb_host_interface_release(usbHost->clientHandle, usbHost->deviceHandle, usbHost->usbInterface[i]);
+            err = usb_host_interface_release(usbHost->clientHandle, usbHost->usbInterface[i].devHandle, usbHost->usbInterface[i].ifNum);
             if (err == ESP_OK) {
                 ESP_LOGI("EspUsbHost", "Released USB interface at index %d", i);
-                usbHost->usbInterface[i] = 0;
             } else {
                 ESP_LOGE("EspUsbHost", "Failed to release USB interface at index %d. Error: %d", i, err);
             }
         }
         usbHost->usbInterfaceSize = 0;
 
-        err = usb_host_device_close(usbHost->clientHandle, usbHost->deviceHandle);
-        if (err == ESP_OK) {
-            ESP_LOGI("EspUsbHost", "Device closed successfully");
-        } else {
-            ESP_LOGE("EspUsbHost", "Failed to close device. Error: %d", err);
+        for (int i = 0; i < usbHost->openDeviceCount; i++) {
+            if (usbHost->openDeviceHandles[i] != NULL) {
+                err = usb_host_device_close(usbHost->clientHandle, usbHost->openDeviceHandles[i]);
+                if (err == ESP_OK) {
+                    ESP_LOGI("EspUsbHost", "Closed device at index %d", i);
+                } else {
+                    ESP_LOGE("EspUsbHost", "Failed to close device at index %d. Error: %d", i, err);
+                }
+                usbHost->openDeviceHandles[i] = NULL;
+            }
         }
+        usbHost->openDeviceCount = 0;
 
         usbHost->deviceHandle = NULL;
         usbHost->isReady = false;
@@ -692,43 +711,67 @@ void EspUsbHost::_onReceiveControl(usb_transfer_t *transfer)
      usbHost->logRawBytes("EspUsbHost::_onReceiveControl", transfer->data_buffer, transfer->actual_num_bytes);
 
     bool isMouse = false;
-    uint8_t *p = &transfer->data_buffer[8];  // Skip the first 8 bytes for processing
+    bool isKeyboard = false;
+    uint8_t *p = &transfer->data_buffer[8];
     int totalBytes = transfer->actual_num_bytes;
 
     ESP_LOGI("EspUsbHost", "onReceiveControl called with %d bytes", totalBytes);
 
-    // Check if it's a mouse
     for (int i = 0; i < totalBytes - 3; i++)
     {
-        if (p[i] == 0x05 && p[i + 1] == 0x01 && p[i + 2] == 0x09 && p[i + 3] == 0x02)
+        if (p[i] == 0x05 && p[i + 1] == 0x01 && p[i + 2] == 0x09)
         {
-            isMouse = true;
-            break;
+            if (p[i + 3] == 0x02) {
+                isMouse = true;
+                break;
+            } else if (p[i + 3] == 0x06) {
+                isKeyboard = true;
+                break;
+            }
         }
     }
 
-    if (!isMouse)
+    if (isMouse)
     {
-        ESP_LOGI("EspUsbHost", "Device is not a mouse, skipping further processing");
-        usb_host_transfer_free(transfer);
-        return;
-    }
+        ESP_LOGI("EspUsbHost", "Mouse device detected, parsing HID report descriptor");
 
-    ESP_LOGI("EspUsbHost", "Mouse device detected, parsing HID report descriptor");
+        HIDReportDescriptor descriptor = usbHost->parseHIDReportDescriptor(&transfer->data_buffer[8], transfer->actual_num_bytes - 8);
 
-    HIDReportDescriptor descriptor = usbHost->parseHIDReportDescriptor(&transfer->data_buffer[8], transfer->actual_num_bytes - 8);
+        usbHost->mouseDeviceHandle = transfer->device_handle;
 
-    for (int i = 0; i < 16; i++)
-    {
-        if (usbHost->endpoint_data_list[i].bInterfaceClass == USB_CLASS_HID &&
-            (usbHost->endpoint_data_list[i].bInterfaceProtocol == HID_ITF_PROTOCOL_MOUSE ||
-             descriptor.xAxisSize > 0))
+        for (int i = 0; i < 16; i++)
         {
-            usbHost->mouseEndpointNum = i;
-            ESP_LOGI("EspUsbHost", "Mouse endpoint cached at index %d (protocol=%d, xAxisSize=%d)",
-                     i, usbHost->endpoint_data_list[i].bInterfaceProtocol, descriptor.xAxisSize);
-            break;
+            if (usbHost->endpoint_data_list[i].bInterfaceClass == USB_CLASS_HID &&
+                (usbHost->endpoint_data_list[i].bInterfaceProtocol == HID_ITF_PROTOCOL_MOUSE ||
+                 descriptor.xAxisSize > 0))
+            {
+                usbHost->mouseEndpointNum = i;
+                ESP_LOGI("EspUsbHost", "Mouse endpoint cached at index %d (protocol=%d, xAxisSize=%d)",
+                         i, usbHost->endpoint_data_list[i].bInterfaceProtocol, descriptor.xAxisSize);
+                break;
+            }
         }
+    }
+    else if (isKeyboard)
+    {
+        ESP_LOGI("EspUsbHost", "Keyboard device detected");
+
+        usbHost->keyboardDeviceHandle = transfer->device_handle;
+
+        for (int i = 0; i < 16; i++)
+        {
+            if (usbHost->endpoint_data_list[i].bInterfaceClass == USB_CLASS_HID &&
+                usbHost->endpoint_data_list[i].bInterfaceProtocol == HID_ITF_PROTOCOL_KEYBOARD)
+            {
+                usbHost->keyboardEndpointNum = i;
+                ESP_LOGI("EspUsbHost", "Keyboard endpoint cached at index %d", i);
+                break;
+            }
+        }
+    }
+    else
+    {
+        ESP_LOGI("EspUsbHost", "Device is not a mouse or keyboard, skipping");
     }
 
     usb_host_transfer_free(transfer);
@@ -803,6 +846,33 @@ void EspUsbHost::onMouseMove(hid_mouse_report_t report)
 }
 
 
+void EspUsbHost::onKeyboard(const uint8_t *data, int length)
+{
+    if (!deviceKeyboardReady || length < 8) return;
+
+    uint8_t modifiers = data[0];
+    const uint8_t *keys = &data[2];
+
+    bool changed = (modifiers != lastKeyboardModifiers);
+    if (!changed) {
+        for (int i = 0; i < 6; i++) {
+            if (keys[i] != lastKeyboardKeys[i]) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if (!changed) return;
+
+    serial1Send("kb.report(%d,%d,%d,%d,%d,%d,%d)\n",
+                modifiers, keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]);
+
+    lastKeyboardModifiers = modifiers;
+    memcpy(lastKeyboardKeys, keys, 6);
+}
+
+
 void EspUsbHost::_onReceive(usb_transfer_t *transfer)
 {
     EspUsbHost *usbHost = static_cast<EspUsbHost *>(transfer->context);
@@ -842,7 +912,10 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         usbHost->logRawBytes("EspUsbHost::_onReceive HID Report", transfer->data_buffer, transfer->actual_num_bytes);
     }
 
-    if (usbHost->mouseEndpointNum != 0xFF && has_data)
+    bool isMouseData = (usbHost->mouseDeviceHandle != NULL && transfer->device_handle == usbHost->mouseDeviceHandle);
+    bool isKeyboardData = (usbHost->keyboardDeviceHandle != NULL && transfer->device_handle == usbHost->keyboardDeviceHandle);
+
+    if (isMouseData && has_data)
     {
         static uint8_t last_buttons = 0;
         hid_mouse_report_t report = {};
@@ -894,6 +967,10 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         {
             usbHost->onMouseMove(report);
         }
+    }
+    else if (isKeyboardData && has_data)
+    {
+        usbHost->onKeyboard(transfer->data_buffer, transfer->actual_num_bytes);
     }
 
     if (transfer->status != USB_TRANSFER_STATUS_COMPLETED)

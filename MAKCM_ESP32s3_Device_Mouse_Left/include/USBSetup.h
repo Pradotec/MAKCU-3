@@ -3,10 +3,12 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDMouse.h>
+#include <USBHIDKeyboard.h>
 #include "InitSettings.h"
 
 
 extern USBHIDMouse Mouse;
+extern USBHIDKeyboard Keyboard;
 
 extern DeviceInfo device_info;
 extern DescriptorDevice descriptor_device;

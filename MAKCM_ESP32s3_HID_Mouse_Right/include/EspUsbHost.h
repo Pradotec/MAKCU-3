@@ -44,8 +44,10 @@ public:
     bool debugModeActive = false;
     bool isReady = false;
     static bool deviceMouseReady;
+    static bool deviceKeyboardReady;
     uint8_t interval;
     uint8_t mouseEndpointNum = 0xFF;
+    uint8_t keyboardEndpointNum = 0xFF;
     bool isClientRegistering = false;
     bool deviceSuspended = false;
     static bool deviceConnected;
@@ -82,8 +84,18 @@ public:
     usb_device_handle_t deviceHandle;
     usb_transfer_t *usbTransfer[16];
     uint8_t usbTransferSize;
-    uint8_t usbInterface[16];
+
+    struct ClaimedInterface {
+        usb_device_handle_t devHandle;
+        uint8_t ifNum;
+    };
+    ClaimedInterface usbInterface[16];
     uint8_t usbInterfaceSize;
+
+    usb_device_handle_t mouseDeviceHandle = NULL;
+    usb_device_handle_t keyboardDeviceHandle = NULL;
+    usb_device_handle_t openDeviceHandles[2];
+    uint8_t openDeviceCount = 0;
 
     TaskHandle_t usbTaskHandle = nullptr;
     TaskHandle_t clientTaskHandle = nullptr;
@@ -101,6 +113,9 @@ public:
     };
 
     static struct HIDReportDescriptor HIDReportDesc;
+
+    static uint8_t lastKeyboardModifiers;
+    static uint8_t lastKeyboardKeys[6];
 
     struct DeviceInfo {
         uint8_t speed;                         // USB device speed
@@ -251,6 +266,7 @@ public:
     virtual void onMouse(hid_mouse_report_t report, uint8_t last_buttons);
     virtual void onMouseButtons(hid_mouse_report_t report, uint8_t last_buttons);
     virtual void onMouseMove(hid_mouse_report_t report);
+    void onKeyboard(const uint8_t *data, int length);
     void receiveSerial0(void *command);
     void logRawBytes(const char *functionName, const uint8_t *data, uint16_t length);
     void cleanupTask(void *arg);

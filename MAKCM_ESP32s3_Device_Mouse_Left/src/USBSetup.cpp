@@ -1,5 +1,6 @@
 #include "USBSetup.h"
 #include <USBHIDMouse.h>
+#include <USBHIDKeyboard.h>
 #include <USB.h>
 #include "tusb.h"
 
@@ -20,6 +21,7 @@ extern volatile bool deviceConnected;
 extern bool usbIsDebug;
 
 USBHIDMouse Mouse;
+USBHIDKeyboard Keyboard;
 extern ESPUSB USB;
 
 /*
@@ -84,5 +86,6 @@ void InitUSB() {
     USB.usbProtocol(descriptor_device.bDeviceProtocol);
 
     Mouse.begin();
+    Keyboard.begin();
     USB.begin();
 }

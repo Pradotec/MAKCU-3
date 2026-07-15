@@ -57,8 +57,9 @@ void EspUsbHost::handleIncomingCommands(const String &command)
     else if (command == "USB_INIT")
     {
         deviceMouseReady = true;
-        serial1Send("USB Initialized. Mouse ready.\n");
-        ESP_LOGI("EspUsbHost", "USB initialized. Mouse ready.");
+        deviceKeyboardReady = true;
+        serial1Send("USB Initialized. Mouse and keyboard ready.\n");
+        ESP_LOGI("EspUsbHost", "USB initialized. Mouse and keyboard ready.");
     }
     else if (command == "sendDeviceInfo")
     {

@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBHIDMouse.h>
+#include <USBHIDKeyboard.h>
 #include "USBSetup.h"
 #include <esp_intr_alloc.h>
 #include <cstring>
@@ -21,6 +22,12 @@ std::atomic<bool> isForwardButtonPressed(false);
 std::atomic<bool> isBackwardButtonPressed(false);
 std::atomic<bool> serial0Locked(true);
 std::atomic<bool> kmMoveCom(false);
+
+// Keyboard state
+uint8_t currentKeyboardModifiers = 0;
+uint8_t currentKeyboardKeys[6] = {0};
+uint8_t simulatedKeyModifiers = 0;
+uint8_t simulatedKeys[6] = {0};
 
 // Task handles
 extern TaskHandle_t mouseMoveTaskHandle;
@@ -80,7 +87,12 @@ CommandEntry normalCommandTable[] = {
     {"km.side1(0)", handleKmMouseButtonForward0},
     {"km.side2(1)", handleKmMouseButtonBackward1},
     {"km.side2(0)", handleKmMouseButtonBackward0},
-    {"km.wheel", handleKmWheel}
+    {"km.wheel", handleKmWheel},
+    {"kb.report(", handleKbReport},
+    {"kb.press(", handleKbPress},
+    {"kb.release(", handleKbRelease},
+    {"kb.releaseall", handleKbReleaseAll},
+    {"kb.isdown(", handleKbIsDown}
 };
 
 CommandEntry usbCommandTable[] = {
@@ -232,6 +244,9 @@ void handleUsbGoodbye(const char *command) {
     handleMouseButton(MOUSE_BUTTON_FORWARD, false);
     handleMouseButton(MOUSE_BUTTON_BACKWARD, false);
     handleMouseWheel(0);
+    simulatedKeyModifiers = 0;
+    memset(simulatedKeys, 0, sizeof(simulatedKeys));
+    Keyboard.releaseAll();
     vTaskDelay(100);
     ESP.restart();
 }
@@ -463,4 +478,91 @@ void handleMouseWheel(int wheelMovement) {
 
 void handleGetPos() {
     Serial0.println("km.pos(" + String(mouseX) + "," + String(mouseY) + ")");
+}
+
+static void sendKeyboardReport(uint8_t modifiers, const uint8_t keys[6]) {
+    uint8_t report[8];
+    report[0] = modifiers;
+    report[1] = 0;
+    memcpy(&report[2], keys, 6);
+    Keyboard.sendReport((KeyReport *)report);
+}
+
+void handleKbReport(const char *command) {
+    int m = 0, k0 = 0, k1 = 0, k2 = 0, k3 = 0, k4 = 0, k5 = 0;
+    if (sscanf(command + 10, "%d,%d,%d,%d,%d,%d,%d", &m, &k0, &k1, &k2, &k3, &k4, &k5) == 7) {
+        currentKeyboardModifiers = (uint8_t)m;
+        currentKeyboardKeys[0] = (uint8_t)k0;
+        currentKeyboardKeys[1] = (uint8_t)k1;
+        currentKeyboardKeys[2] = (uint8_t)k2;
+        currentKeyboardKeys[3] = (uint8_t)k3;
+        currentKeyboardKeys[4] = (uint8_t)k4;
+        currentKeyboardKeys[5] = (uint8_t)k5;
+        sendKeyboardReport(currentKeyboardModifiers, currentKeyboardKeys);
+    }
+}
+
+void handleKbPress(const char *command) {
+    int keycode = 0;
+    if (sscanf(command + 9, "%d", &keycode) == 1) {
+        uint8_t k = (uint8_t)keycode;
+        if (k >= 0xE0 && k <= 0xE7) {
+            simulatedKeyModifiers |= (1 << (k - 0xE0));
+        } else {
+            for (int i = 0; i < 6; i++) {
+                if (simulatedKeys[i] == 0 || simulatedKeys[i] == k) {
+                    simulatedKeys[i] = k;
+                    break;
+                }
+            }
+        }
+        sendKeyboardReport(simulatedKeyModifiers, simulatedKeys);
+    }
+}
+
+void handleKbRelease(const char *command) {
+    int keycode = 0;
+    if (sscanf(command + 11, "%d", &keycode) == 1) {
+        uint8_t k = (uint8_t)keycode;
+        if (k >= 0xE0 && k <= 0xE7) {
+            simulatedKeyModifiers &= ~(1 << (k - 0xE0));
+        } else {
+            for (int i = 0; i < 6; i++) {
+                if (simulatedKeys[i] == k) {
+                    simulatedKeys[i] = 0;
+                    break;
+                }
+            }
+        }
+        sendKeyboardReport(simulatedKeyModifiers, simulatedKeys);
+    }
+}
+
+void handleKbReleaseAll(const char *command) {
+    simulatedKeyModifiers = 0;
+    memset(simulatedKeys, 0, sizeof(simulatedKeys));
+    sendKeyboardReport(0, simulatedKeys);
+}
+
+void handleKbIsDown(const char *command) {
+    int keycode = 0;
+    if (sscanf(command + 10, "%d", &keycode) == 1) {
+        uint8_t k = (uint8_t)keycode;
+        bool isDown = false;
+        if (k >= 0xE0 && k <= 0xE7) {
+            isDown = (currentKeyboardModifiers & (1 << (k - 0xE0))) != 0;
+        } else {
+            for (int i = 0; i < 6; i++) {
+                if (currentKeyboardKeys[i] == k) {
+                    isDown = true;
+                    break;
+                }
+            }
+        }
+        Serial0.print("kb.state(");
+        Serial0.print(keycode);
+        Serial0.print(",");
+        Serial0.print(isDown ? "1" : "0");
+        Serial0.println(")");
+    }
 }
