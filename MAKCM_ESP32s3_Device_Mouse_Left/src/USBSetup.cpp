@@ -77,6 +77,11 @@ void requestUSBDescriptors() {
 
 void InitUSB() {
 
+    Serial0.printf("InitUSB: VID=0x%04X PID=0x%04X\n", descriptor_device.idVendor, descriptor_device.idProduct);
+    Serial0.printf("InitUSB: Manufacturer='%s'\n", device_info.str_desc_manufacturer);
+    Serial0.printf("InitUSB: Product='%s'\n", device_info.str_desc_product);
+    Serial0.printf("InitUSB: Serial='%s'\n", device_info.str_desc_serial_num);
+
     if (descriptor_device.idVendor != 0) {
         USB.VID(descriptor_device.idVendor);
     }
