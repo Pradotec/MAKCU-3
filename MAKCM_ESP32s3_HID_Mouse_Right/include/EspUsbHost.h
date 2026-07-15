@@ -45,6 +45,7 @@ public:
     bool isReady = false;
     static bool deviceMouseReady;
     static bool deviceKeyboardReady;
+    static bool keyboardIdentified;
     uint8_t interval;
     uint8_t mouseEndpointNum = 0xFF;
     uint8_t keyboardEndpointNum = 0xFF;
@@ -96,6 +97,8 @@ public:
     usb_device_handle_t keyboardDeviceHandle = NULL;
     usb_device_handle_t openDeviceHandles[2];
     uint8_t openDeviceCount = 0;
+    uint8_t devicesIdentified = 0;
+    uint32_t firstDeviceOpenTime = 0;
 
     TaskHandle_t usbTaskHandle = nullptr;
     TaskHandle_t clientTaskHandle = nullptr;

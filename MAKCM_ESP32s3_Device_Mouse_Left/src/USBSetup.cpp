@@ -77,6 +77,12 @@ void requestUSBDescriptors() {
 
 void InitUSB() {
 
+    if (descriptor_device.idVendor != 0) {
+        USB.VID(descriptor_device.idVendor);
+    }
+    if (descriptor_device.idProduct != 0) {
+        USB.PID(descriptor_device.idProduct);
+    }
     USB.usbVersion(descriptor_device.bcdUSB);
     USB.firmwareVersion(descriptor_device.bcdDevice);
     USB.usbPower(configuration_descriptor.bMaxPower);

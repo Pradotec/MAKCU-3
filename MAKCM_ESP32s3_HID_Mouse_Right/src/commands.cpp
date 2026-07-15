@@ -47,10 +47,21 @@ void EspUsbHost::handleIncomingCommands(const String &command)
                 serial1Send("USB_HELLO\n");
                 ESP_LOGI("EspUsbHost", "Device is connected.");
             }
+            else if (openDeviceCount > 0 && firstDeviceOpenTime > 0 &&
+                     (millis() - firstDeviceOpenTime) > 3000)
+            {
+                EspUsbHost::deviceConnected = true;
+                serial1Send("USB_HELLO\n");
+                ESP_LOGW("EspUsbHost", "HID identification timeout, proceeding with available identity.");
+            }
             else
             {
                 serial1Send("USB_ISNULL\n");
-                ESP_LOGW("EspUsbHost", "No device is connected.");
+                if (openDeviceCount > 0) {
+                    ESP_LOGI("EspUsbHost", "Waiting for HID device identification...");
+                } else {
+                    ESP_LOGW("EspUsbHost", "No device is connected.");
+                }
             }
         }
     }
