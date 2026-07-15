@@ -58,6 +58,7 @@ void receiveDeviceInfo(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -69,6 +70,7 @@ void receiveDeviceInfo(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -132,6 +134,7 @@ void receiveDescriptorDevice(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -185,6 +188,7 @@ void receiveEndpointDescriptors(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -197,6 +201,7 @@ void receiveEndpointDescriptors(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -254,6 +259,7 @@ void receiveInterfaceDescriptors(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -266,6 +272,7 @@ void receiveInterfaceDescriptors(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -319,6 +326,7 @@ void receiveHidDescriptors(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -331,6 +339,7 @@ void receiveHidDescriptors(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -380,6 +389,7 @@ void receiveIADescriptors(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -391,6 +401,7 @@ void receiveIADescriptors(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -434,6 +445,7 @@ void receiveEndpointData(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -445,6 +457,7 @@ void receiveEndpointData(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -487,6 +500,7 @@ void receiveUnknownDescriptors(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command prefix\n"));
+        sendNextCommand();
         return;
     }
 
@@ -499,6 +513,7 @@ void receiveUnknownDescriptors(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 
@@ -554,6 +569,7 @@ void receivedescriptorConfiguration(const char *command)
         Serial0.println(error.c_str());
         Serial0.print(F("Failed JSON string:\n"));
         Serial0.println(jsonString);
+        sendNextCommand();
         return;
     }
 

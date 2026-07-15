@@ -41,8 +41,8 @@ bool processingUsbCommands = false;
 
 
 
-RingBuf<char, 620> serial0RingBuffer;
-RingBuf<char, 620> serial1RingBuffer;
+RingBuf<char, 1024> serial0RingBuffer;
+RingBuf<char, 1024> serial1RingBuffer;
 int currentCommandIndex = 0;
 
 int16_t mouseX = 0;
@@ -135,7 +135,7 @@ void serial0RX() {
         }
 
         if (byte == '\n') {
-            char commandBuffer[620];
+            char commandBuffer[1024];
             int commandIndex = 0;
 
             while (!serial0RingBuffer.isEmpty() && commandIndex < sizeof(commandBuffer) - 1) {
@@ -173,7 +173,7 @@ void serial1RX() {
         }
 
         if (byte == '\n') {
-            char commandBuffer[620];
+            char commandBuffer[1024];
             int commandIndex = 0;
 
             while (!serial1RingBuffer.isEmpty() && commandIndex < sizeof(commandBuffer) - 1) {

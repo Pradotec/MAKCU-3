@@ -276,6 +276,16 @@ void EspUsbHost::onConfig(const uint8_t bDescriptorType, const uint8_t *p)
 
         if (interfaceCounter < MAX_INTERFACE_DESCRIPTORS)
         {
+            interface_descriptors[interfaceCounter].bLength = intf->bLength;
+            interface_descriptors[interfaceCounter].bDescriptorType = intf->bDescriptorType;
+            interface_descriptors[interfaceCounter].bInterfaceNumber = intf->bInterfaceNumber;
+            interface_descriptors[interfaceCounter].bAlternateSetting = intf->bAlternateSetting;
+            interface_descriptors[interfaceCounter].bNumEndpoints = intf->bNumEndpoints;
+            interface_descriptors[interfaceCounter].bInterfaceClass = intf->bInterfaceClass;
+            interface_descriptors[interfaceCounter].bInterfaceSubClass = intf->bInterfaceSubClass;
+            interface_descriptors[interfaceCounter].bInterfaceProtocol = intf->bInterfaceProtocol;
+            interface_descriptors[interfaceCounter].iInterface = intf->iInterface;
+
             this->claim_err = usb_host_interface_claim(this->clientHandle, this->deviceHandle, intf->bInterfaceNumber, intf->bAlternateSetting);
             if (this->claim_err != ESP_OK)
             {
