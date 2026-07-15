@@ -75,55 +75,46 @@ void EspUsbHost::handleIncomingCommands(const String &command)
     else if (command == "sendDeviceInfo")
     {
         sendDeviceInfo();
-        serial1Send("Device information sent.\n");
         ESP_LOGI("EspUsbHost", "Sending device information.");
     }
     else if (command == "sendDescriptorDevice")
     {
         sendDescriptorDevice();
-        serial1Send("Device descriptor sent.\n");
         ESP_LOGI("EspUsbHost", "Sending device descriptor.");
     }
     else if (command == "sendEndpointDescriptors")
     {
         sendEndpointDescriptors();
-        serial1Send("Endpoint descriptors sent.\n");
         ESP_LOGI("EspUsbHost", "Sending endpoint descriptors.");
     }
     else if (command == "sendInterfaceDescriptors")
     {
         sendInterfaceDescriptors();
-        serial1Send("Interface descriptors sent.\n");
         ESP_LOGI("EspUsbHost", "Sending interface descriptors.");
     }
     else if (command == "sendHidDescriptors")
     {
         sendHidDescriptors();
-        serial1Send("HID descriptors sent.\n");
         ESP_LOGI("EspUsbHost", "Sending HID descriptors.");
     }
     else if (command == "sendIADescriptors")
     {
         sendIADescriptors();
-        serial1Send("Interface Association Descriptors sent.\n");
         ESP_LOGI("EspUsbHost", "Sending Interface Association Descriptors.");
     }
     else if (command == "sendEndpointData")
     {
         sendEndpointData();
-        serial1Send("Endpoint data sent.\n");
         ESP_LOGI("EspUsbHost", "Sending endpoint data.");
     }
     else if (command == "sendUnknownDescriptors")
     {
         sendUnknownDescriptors();
-        serial1Send("Unknown descriptors sent.\n");
         ESP_LOGI("EspUsbHost", "Sending unknown descriptors.");
     }
     else if (command == "sendDescriptorconfig")
     {
         sendDescriptorconfig();
-        serial1Send("Configuration descriptor sent.\n");
         ESP_LOGI("EspUsbHost", "Sending configuration descriptor.");
     }
     else if (command == "YIELD")
