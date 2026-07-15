@@ -20,6 +20,7 @@ void setup() {
     Serial0.begin(115200);
     pinMode(9, OUTPUT);
     digitalWrite(9, LOW);
+    Serial1.setRxBufferSize(4096);
     Serial1.begin(5000000, SERIAL_8N1, 1, 2);
     
     if (USB_IS_DEBUG) {
