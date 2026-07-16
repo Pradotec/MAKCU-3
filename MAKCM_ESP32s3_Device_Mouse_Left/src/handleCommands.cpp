@@ -184,6 +184,10 @@ void serial1RX() {
 
             trimCommand(commandBuffer);
 
+            if (strncmp(commandBuffer, "km.", 3) != 0 && strncmp(commandBuffer, "kb.", 3) != 0) {
+                Serial0.printf("[S1 len=%d] %.50s\n", strlen(commandBuffer), commandBuffer);
+            }
+
             if (strncmp(commandBuffer, "km.move", 7) == 0 && !kmMoveCom) {
                 handleKmMoveCommand(commandBuffer);
             } else {
@@ -228,6 +232,7 @@ void notifyLedFlashTask() {
 
 
 void handleUsbHello(const char *command) {
+    Serial0.println("[HS] USB_HELLO received, starting handshake");
     deviceConnected = true;
     usbReady = true;
     processingUsbCommands = true;
@@ -256,9 +261,11 @@ void sendNextCommand() {
         return;
     }
     const char *command = commandQueue[currentCommandIndex];
+    Serial0.printf("[HS] Sending cmd %d: %s\n", currentCommandIndex, command);
     Serial1.println(command);
     currentCommandIndex++;
     if (currentCommandIndex >= sizeof(commandQueue) / sizeof(commandQueue[0])) {
+        Serial0.println("[HS] All commands done, calling InitUSB");
         usbReady = false;
         processingUsbCommands = false;
         InitUSB();
@@ -362,6 +369,7 @@ void handleDebugcommand(const char *command) {
 
 void handleNoDevice(const char *command)
 {
+    Serial0.print(".");
     deviceConnected = false;
 }
 

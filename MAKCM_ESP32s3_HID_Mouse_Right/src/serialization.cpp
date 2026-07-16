@@ -23,6 +23,7 @@ static void chunkedSerialWrite(const String &data)
 
 void EspUsbHost::sendDeviceInfo()
 {
+    serial1Send("ESPLOG_[RIGHT] sendDeviceInfo called\n");
     JsonDocument doc;
     doc["speed"] = device_info.speed;
     doc["dev_addr"] = device_info.dev_addr;
