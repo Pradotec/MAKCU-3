@@ -158,8 +158,49 @@ void serial0RX() {
     }
 }
 
+static uint8_t prevBinaryButtons = 0;
+
+static void handleBinaryMouse(const uint8_t *packet) {
+    uint8_t buttons = packet[1];
+    int16_t x = (int16_t)(packet[2] | (packet[3] << 8));
+    int16_t y = (int16_t)(packet[4] | (packet[5] << 8));
+    int8_t wheel = (int8_t)packet[6];
+
+    uint8_t changed = buttons ^ prevBinaryButtons;
+    if (changed) {
+        if (changed & MOUSE_BUTTON_LEFT)
+            handleMouseButton(MOUSE_BUTTON_LEFT, buttons & MOUSE_BUTTON_LEFT);
+        if (changed & MOUSE_BUTTON_RIGHT)
+            handleMouseButton(MOUSE_BUTTON_RIGHT, buttons & MOUSE_BUTTON_RIGHT);
+        if (changed & MOUSE_BUTTON_MIDDLE)
+            handleMouseButton(MOUSE_BUTTON_MIDDLE, buttons & MOUSE_BUTTON_MIDDLE);
+        if (changed & MOUSE_BUTTON_FORWARD)
+            handleMouseButton(MOUSE_BUTTON_FORWARD, buttons & MOUSE_BUTTON_FORWARD);
+        if (changed & MOUSE_BUTTON_BACKWARD)
+            handleMouseButton(MOUSE_BUTTON_BACKWARD, buttons & MOUSE_BUTTON_BACKWARD);
+        prevBinaryButtons = buttons;
+    }
+
+    if (x != 0 || y != 0 || wheel != 0) {
+        Mouse.move(x, y, wheel);
+        mouseX += x;
+        mouseY += y;
+    }
+}
+
 void serial1RX() {
     while (Serial1.available() > 0) {
+        if ((uint8_t)Serial1.peek() == 0xAA) {
+            if (Serial1.available() >= 7) {
+                uint8_t packet[7];
+                Serial1.readBytes(packet, 7);
+                handleBinaryMouse(packet);
+            } else {
+                break;
+            }
+            continue;
+        }
+
         char byte = Serial1.read();
 
         if (byte == '\r') {
@@ -242,6 +283,7 @@ void handleUsbHello(const char *command) {
 
 void handleUsbGoodbye(const char *command) {
     Serial0.println("USB Device disconnected. Restarting!");
+    prevBinaryButtons = 0;
     handleMove(0, 0);
     handleMouseButton(MOUSE_BUTTON_LEFT, false);
     handleMouseButton(MOUSE_BUTTON_RIGHT, false);

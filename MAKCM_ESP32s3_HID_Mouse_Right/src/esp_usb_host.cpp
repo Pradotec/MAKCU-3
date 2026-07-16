@@ -5,6 +5,8 @@
 
 #define USB_FEATURE_SELECTOR_REMOTE_WAKEUP 1
 
+extern SemaphoreHandle_t serial1Mutex;
+
 bool EspUsbHost::deviceMouseReady = false;
 bool EspUsbHost::deviceKeyboardReady = false;
 bool EspUsbHost::deviceConnected = false;
@@ -1056,15 +1058,30 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         }
 
         usbHost->onMouse(report, last_buttons);
-        if (report.buttons != last_buttons)
+
+        bool buttonsChanged = (report.buttons != last_buttons);
+        bool hasMovement = (report.x != 0 || report.y != 0 || report.wheel != 0);
+
+        if (usbHost->deviceMouseReady && (buttonsChanged || hasMovement))
         {
-            usbHost->onMouseButtons(report, last_buttons);
-            last_buttons = report.buttons;
+            uint8_t packet[7] = {
+                0xAA,
+                report.buttons,
+                (uint8_t)(report.x & 0xFF),
+                (uint8_t)((report.x >> 8) & 0xFF),
+                (uint8_t)(report.y & 0xFF),
+                (uint8_t)((report.y >> 8) & 0xFF),
+                (uint8_t)report.wheel
+            };
+            if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                Serial1.write(packet, 7);
+                xSemaphoreGive(serial1Mutex);
+            } else {
+                Serial1.write(packet, 7);
+            }
         }
-        if (report.x != 0 || report.y != 0 || report.wheel != 0)
-        {
-            usbHost->onMouseMove(report);
-        }
+
+        last_buttons = report.buttons;
     }
     else if (isKeyboardData && has_data)
     {
