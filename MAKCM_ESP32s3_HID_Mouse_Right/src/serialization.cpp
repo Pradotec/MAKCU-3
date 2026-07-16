@@ -2,28 +2,20 @@
 
 extern SemaphoreHandle_t serial1Mutex;
 
-static void chunkedSerialWrite(const String &data)
+static void serialWriteMessage(const String &data)
 {
     if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
-        ESP_LOGE("chunkedSerialWrite", "Failed to acquire serial1Mutex");
+        ESP_LOGE("serialWriteMessage", "Failed to acquire serial1Mutex");
         return;
     }
-    const char *ptr = data.c_str();
-    size_t remaining = data.length();
-    while (remaining > 0)
-    {
-        size_t chunk = remaining < 128 ? remaining : 128;
-        Serial1.write((const uint8_t *)ptr, chunk);
-        Serial1.flush();
-        ptr += chunk;
-        remaining -= chunk;
-    }
+    vTaskDelay(pdMS_TO_TICKS(1));
+    Serial1.write((const uint8_t *)data.c_str(), data.length());
+    Serial1.flush();
     if (serial1Mutex) xSemaphoreGive(serial1Mutex);
 }
 
 void EspUsbHost::sendDeviceInfo()
 {
-    serial1Send("ESPLOG_[RIGHT] sendDeviceInfo called\n");
     JsonDocument doc;
     doc["speed"] = device_info.speed;
     doc["dev_addr"] = device_info.dev_addr;
@@ -35,7 +27,7 @@ void EspUsbHost::sendDeviceInfo()
     String output = "USB_sendDeviceInfo:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendDescriptorDevice()
@@ -58,7 +50,7 @@ void EspUsbHost::sendDescriptorDevice()
     String output = "USB_sendDescriptorDevice:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendEndpointDescriptors()
@@ -82,7 +74,7 @@ void EspUsbHost::sendEndpointDescriptors()
     String output = "USB_sendEndpointDescriptors:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendInterfaceDescriptors()
@@ -105,7 +97,7 @@ void EspUsbHost::sendInterfaceDescriptors()
     String output = "USB_sendInterfaceDescriptors:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendHidDescriptors()
@@ -126,7 +118,7 @@ void EspUsbHost::sendHidDescriptors()
     String output = "USB_sendHidDescriptors:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendIADescriptors()
@@ -143,7 +135,7 @@ void EspUsbHost::sendIADescriptors()
     String output = "USB_sendIADescriptors:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendEndpointData()
@@ -163,7 +155,7 @@ void EspUsbHost::sendEndpointData()
     String output = "USB_sendEndpointData:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendUnknownDescriptors()
@@ -180,7 +172,7 @@ void EspUsbHost::sendUnknownDescriptors()
     String output = "USB_sendUnknownDescriptors:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
 
 void EspUsbHost::sendDescriptorconfig()
@@ -197,5 +189,5 @@ void EspUsbHost::sendDescriptorconfig()
     String output = "USB_sendDescriptorconfig:";
     serializeJson(doc, output);
     output += "\n";
-    chunkedSerialWrite(output);
+    serialWriteMessage(output);
 }
