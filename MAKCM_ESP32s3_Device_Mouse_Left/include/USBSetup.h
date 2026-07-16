@@ -2,12 +2,12 @@
 
 #include <Arduino.h>
 #include <USB.h>
-#include <USBHIDMouse.h>
 #include <USBHIDKeyboard.h>
+#include "USBHIDMouse16.h"
 #include "InitSettings.h"
 
 
-extern USBHIDMouse Mouse;
+extern USBHIDMouse16 Mouse;
 extern USBHIDKeyboard Keyboard;
 
 extern DeviceInfo device_info;

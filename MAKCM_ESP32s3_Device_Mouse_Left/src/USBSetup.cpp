@@ -1,5 +1,4 @@
 #include "USBSetup.h"
-#include <USBHIDMouse.h>
 #include <USBHIDKeyboard.h>
 #include <USB.h>
 #include "tusb.h"
@@ -20,7 +19,7 @@ extern DescriptorConfiguration configuration_descriptor;
 extern volatile bool deviceConnected;
 extern bool usbIsDebug;
 
-USBHIDMouse Mouse;
+USBHIDMouse16 Mouse;
 USBHIDKeyboard Keyboard;
 extern ESPUSB USB;
 

@@ -3,15 +3,15 @@
 #include "InitSettings.h"
 #include <Arduino.h>
 #include <USB.h>
-#include <USBHIDMouse.h>
 #include <USBHIDKeyboard.h>
+#include "USBHIDMouse16.h"
 #include "USBSetup.h"
 #include <esp_intr_alloc.h>
 #include <cstring>
 #include <atomic>
 
 // Extern variables
-extern USBHIDMouse Mouse;
+extern USBHIDMouse16 Mouse;
 extern USBHIDKeyboard Keyboard;
 extern TaskHandle_t mouseMoveTaskHandle;
 extern TaskHandle_t ledFlashTaskHandle;

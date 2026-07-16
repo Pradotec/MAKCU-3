@@ -3,7 +3,6 @@
 #include "tasks.h"
 #include <Arduino.h>
 #include <USB.h>
-#include <USBHIDMouse.h>
 #include <USBHIDKeyboard.h>
 #include "USBSetup.h"
 #include <esp_intr_alloc.h>
@@ -182,16 +181,7 @@ static void handleBinaryMouse(const uint8_t *packet) {
     }
 
     if (x != 0 || y != 0 || wheel != 0) {
-        int16_t remainX = x, remainY = y;
-        int8_t w = wheel;
-        do {
-            int8_t dx = (remainX > 127) ? 127 : (remainX < -128) ? -128 : (int8_t)remainX;
-            int8_t dy = (remainY > 127) ? 127 : (remainY < -128) ? -128 : (int8_t)remainY;
-            Mouse.move(dx, dy, w);
-            remainX -= dx;
-            remainY -= dy;
-            w = 0;
-        } while (remainX != 0 || remainY != 0);
+        Mouse.move(x, y, wheel);
         mouseX += x;
         mouseY += y;
     }
@@ -514,27 +504,13 @@ void handleKmWheel(const char *command) {
 }
 
 void handleMove(int x, int y) {
-    int remainX = x, remainY = y;
-    do {
-        int8_t dx = (remainX > 127) ? 127 : (remainX < -128) ? -128 : (int8_t)remainX;
-        int8_t dy = (remainY > 127) ? 127 : (remainY < -128) ? -128 : (int8_t)remainY;
-        Mouse.move(dx, dy);
-        remainX -= dx;
-        remainY -= dy;
-    } while (remainX != 0 || remainY != 0);
+    Mouse.move(x, y);
     mouseX += x;
     mouseY += y;
 }
 
 void handleMoveto(int x, int y) {
-    int remainX = x - mouseX, remainY = y - mouseY;
-    do {
-        int8_t dx = (remainX > 127) ? 127 : (remainX < -128) ? -128 : (int8_t)remainX;
-        int8_t dy = (remainY > 127) ? 127 : (remainY < -128) ? -128 : (int8_t)remainY;
-        Mouse.move(dx, dy);
-        remainX -= dx;
-        remainY -= dy;
-    } while (remainX != 0 || remainY != 0);
+    Mouse.move(x - mouseX, y - mouseY);
     mouseX = x;
     mouseY = y;
 }
