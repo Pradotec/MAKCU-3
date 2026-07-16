@@ -492,14 +492,7 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
     {
         ESP_LOGI("EspUsbHost::_clientEventCallback", "Device connected");
 
-        usbHost->endpointCounter = 0;
-        usbHost->interfaceCounter = 0;
-        usbHost->hidDescriptorCounter = 0;
-        usbHost->unknownDescriptorCounter = 0;
-        memset(usbHost->endpoint_data_list, 0, sizeof(usbHost->endpoint_data_list));
-
         ESP_LOGD("EspUsbHost", "New device event detected. Raw event message:");
-
         logRawBytes("New Device Event Message", (const uint8_t *)eventMsg, sizeof(usb_host_client_event_msg_t));
 
         err = usb_host_device_open(usbHost->clientHandle, eventMsg->new_dev.address, &usbHost->deviceHandle);
@@ -509,21 +502,43 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
             return;
         }
 
-        if (usbHost->openDeviceCount == 0) {
-            usbHost->firstDeviceOpenTime = millis();
+        const usb_device_desc_t *dev_desc;
+        err = usb_host_get_device_descriptor(usbHost->deviceHandle, &dev_desc);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("EspUsbHost", "Failed to retrieve device descriptor. Error: %d", err);
+            break;
         }
-        if (usbHost->openDeviceCount < 2) {
+
+        if (usbHost->openDeviceCount < 3) {
             usbHost->openDeviceHandles[usbHost->openDeviceCount++] = usbHost->deviceHandle;
         }
 
-        ESP_LOGI("EspUsbHost", "Device opened successfully (count=%d)", usbHost->openDeviceCount);
+        if (dev_desc->bDeviceClass == 0x09)
+        {
+            usbHost->hubCount++;
+            ESP_LOGI("EspUsbHost", "Hub detected (VID=0x%04X PID=0x%04X), skipping identity clone (count=%d, hubs=%d)",
+                     dev_desc->idVendor, dev_desc->idProduct, usbHost->openDeviceCount, usbHost->hubCount);
+            break;
+        }
+
+        usbHost->endpointCounter = 0;
+        usbHost->interfaceCounter = 0;
+        usbHost->hidDescriptorCounter = 0;
+        usbHost->unknownDescriptorCounter = 0;
+        memset(usbHost->endpoint_data_list, 0, sizeof(usbHost->endpoint_data_list));
+
+        if (usbHost->firstDeviceOpenTime == 0) {
+            usbHost->firstDeviceOpenTime = millis();
+        }
+
+        ESP_LOGI("EspUsbHost", "Device opened successfully (count=%d, hubs=%d)", usbHost->openDeviceCount, usbHost->hubCount);
 
         usb_device_info_t dev_info;
         err = usb_host_device_info(usbHost->deviceHandle, &dev_info);
         if (err == ESP_OK)
         {
             ESP_LOGD("EspUsbHost", "Retrieved device info. Raw device info:");
-
             logRawBytes("Device Info", (const uint8_t *)&dev_info, sizeof(usb_device_info_t));
 
             usbHost->device_info.speed = dev_info.speed;
@@ -534,48 +549,36 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
             strcpy(usbHost->device_info.str_desc_product, getUsbDescString(dev_info.str_desc_product).c_str());
             strcpy(usbHost->device_info.str_desc_serial_num, getUsbDescString(dev_info.str_desc_serial_num).c_str());
 
-            ESP_LOGI("EspUsbHost", "Device info retrieved successfully");
+            ESP_LOGI("EspUsbHost", "Device info: VID=0x%04X PID=0x%04X '%s' '%s'",
+                     dev_desc->idVendor, dev_desc->idProduct,
+                     usbHost->device_info.str_desc_manufacturer, usbHost->device_info.str_desc_product);
         }
         else
         {
             ESP_LOGE("EspUsbHost", "Failed to retrieve device info. Error: %d", err);
         }
 
-        const usb_device_desc_t *dev_desc;
-        err = usb_host_get_device_descriptor(usbHost->deviceHandle, &dev_desc);
-        if (err == ESP_OK)
-        {
-            ESP_LOGI("EspUsbHost::_clientEventCallback", "Device descriptor retrieved successfully");
+        logRawBytes("Device Descriptor", (const uint8_t *)dev_desc, sizeof(usb_device_desc_t));
 
-            // Log raw bytes for the device descriptor
-            logRawBytes("Device Descriptor", (const uint8_t *)dev_desc, sizeof(usb_device_desc_t));
-
-            // Field-by-field assignment of the descriptor
-            usbHost->descriptor_device.bLength = dev_desc->bLength;
-            usbHost->descriptor_device.bDescriptorType = dev_desc->bDescriptorType;
-            usbHost->descriptor_device.bcdUSB = dev_desc->bcdUSB;
-            usbHost->descriptor_device.bDeviceClass = dev_desc->bDeviceClass;
-            usbHost->descriptor_device.bDeviceSubClass = dev_desc->bDeviceSubClass;
-            usbHost->descriptor_device.bDeviceProtocol = dev_desc->bDeviceProtocol;
-            usbHost->descriptor_device.bMaxPacketSize0 = dev_desc->bMaxPacketSize0;
-            usbHost->descriptor_device.idVendor = dev_desc->idVendor;
-            usbHost->descriptor_device.idProduct = dev_desc->idProduct;
-            usbHost->descriptor_device.bcdDevice = dev_desc->bcdDevice;
-            usbHost->descriptor_device.iManufacturer = dev_desc->iManufacturer;
-            usbHost->descriptor_device.iProduct = dev_desc->iProduct;
-            usbHost->descriptor_device.iSerialNumber = dev_desc->iSerialNumber;
-            usbHost->descriptor_device.bNumConfigurations = dev_desc->bNumConfigurations;
-        }
-        else
-        {
-            ESP_LOGE("EspUsbHost", "Failed to retrieve device descriptor. Error: %d", err);
-        }
+        usbHost->descriptor_device.bLength = dev_desc->bLength;
+        usbHost->descriptor_device.bDescriptorType = dev_desc->bDescriptorType;
+        usbHost->descriptor_device.bcdUSB = dev_desc->bcdUSB;
+        usbHost->descriptor_device.bDeviceClass = dev_desc->bDeviceClass;
+        usbHost->descriptor_device.bDeviceSubClass = dev_desc->bDeviceSubClass;
+        usbHost->descriptor_device.bDeviceProtocol = dev_desc->bDeviceProtocol;
+        usbHost->descriptor_device.bMaxPacketSize0 = dev_desc->bMaxPacketSize0;
+        usbHost->descriptor_device.idVendor = dev_desc->idVendor;
+        usbHost->descriptor_device.idProduct = dev_desc->idProduct;
+        usbHost->descriptor_device.bcdDevice = dev_desc->bcdDevice;
+        usbHost->descriptor_device.iManufacturer = dev_desc->iManufacturer;
+        usbHost->descriptor_device.iProduct = dev_desc->iProduct;
+        usbHost->descriptor_device.iSerialNumber = dev_desc->iSerialNumber;
+        usbHost->descriptor_device.bNumConfigurations = dev_desc->bNumConfigurations;
 
         const usb_config_desc_t *config_desc;
         err = usb_host_get_active_config_descriptor(usbHost->deviceHandle, &config_desc);
         if (err == ESP_OK)
         {
-            // Log raw bytes for the configuration descriptor
             logRawBytes("Configuration Descriptor", (const uint8_t *)config_desc, config_desc->wTotalLength);
 
             usbHost->descriptor_configuration.bLength = config_desc->bLength;
@@ -615,6 +618,7 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
         lastKeyboardModifiers = 0;
         keyboardIdentified = false;
         usbHost->devicesIdentified = 0;
+        usbHost->hubCount = 0;
         usbHost->firstDeviceOpenTime = 0;
 
         ESP_LOGI("EspUsbHost", "Notifying cleanup task...");
@@ -828,7 +832,7 @@ void EspUsbHost::_onReceiveControl(usb_transfer_t *transfer)
 
     if (isMouse || isKeyboard) {
         usbHost->devicesIdentified++;
-        if (keyboardIdentified || usbHost->devicesIdentified >= usbHost->openDeviceCount) {
+        if (keyboardIdentified || usbHost->devicesIdentified >= (usbHost->openDeviceCount - usbHost->hubCount)) {
             EspUsbHost::deviceConnected = true;
             ESP_LOGI("EspUsbHost", "Device identification complete (keyboard=%s), ready for handshake",
                      keyboardIdentified ? "yes" : "no");

@@ -356,6 +356,7 @@ void handleDebug(const char *command) {
 
 
 void handleDebugcommand(const char *command) {
+    Serial0.print("[DBG] ");
     Serial0.println(command);
 }
 

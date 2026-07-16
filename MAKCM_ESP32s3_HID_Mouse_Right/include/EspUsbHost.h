@@ -95,8 +95,9 @@ public:
 
     usb_device_handle_t mouseDeviceHandle = NULL;
     usb_device_handle_t keyboardDeviceHandle = NULL;
-    usb_device_handle_t openDeviceHandles[2];
+    usb_device_handle_t openDeviceHandles[3];
     uint8_t openDeviceCount = 0;
+    uint8_t hubCount = 0;
     uint8_t devicesIdentified = 0;
     uint32_t firstDeviceOpenTime = 0;
 

@@ -123,6 +123,7 @@ void receiveDescriptorDevice(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid command format\n"));
+        sendNextCommand();
         return;
     }
 
@@ -558,6 +559,7 @@ void receivedescriptorConfiguration(const char *command)
     if (!jsonString)
     {
         Serial0.print(F("Invalid JSON string\n"));
+        sendNextCommand();
         return;
     }
     

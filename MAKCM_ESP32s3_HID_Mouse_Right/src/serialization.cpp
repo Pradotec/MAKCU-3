@@ -1,7 +1,13 @@
 #include "EspUsbHost.h"
 
+extern SemaphoreHandle_t serial1Mutex;
+
 static void chunkedSerialWrite(const String &data)
 {
+    if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+        ESP_LOGE("chunkedSerialWrite", "Failed to acquire serial1Mutex");
+        return;
+    }
     const char *ptr = data.c_str();
     size_t remaining = data.length();
     while (remaining > 0)
@@ -12,6 +18,7 @@ static void chunkedSerialWrite(const String &data)
         ptr += chunk;
         remaining -= chunk;
     }
+    if (serial1Mutex) xSemaphoreGive(serial1Mutex);
 }
 
 void EspUsbHost::sendDeviceInfo()

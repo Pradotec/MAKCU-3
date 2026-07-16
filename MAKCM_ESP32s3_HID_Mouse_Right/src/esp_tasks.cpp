@@ -6,6 +6,7 @@
 RingBuf<char, 512> rxBuffer0;
 RingBuf<char, 512> rxBuffer1;
 SemaphoreHandle_t ledSemaphore;
+SemaphoreHandle_t serial1Mutex = NULL;
 TaskHandle_t cleanupTaskHandle = NULL;
 TaskHandle_t rxSerial0TaskHandle = NULL;
 TaskHandle_t rxSerial1TaskHandle = NULL;
@@ -40,6 +41,7 @@ void EspUsbHost::begin(void)
     usb_host_install(&host_config);
 
     ledSemaphore = xSemaphoreCreateBinary();
+    serial1Mutex = xSemaphoreCreateMutex();
 
     if (xTaskCreate([](void *arg) {
         static_cast<EspUsbHost *>(arg)->receiveSerial0(arg);
@@ -149,6 +151,12 @@ bool EspUsbHost::serial1Send(const char *format, ...)
 
     if (len > 0 && len < (int)sizeof(buf))
     {
+        if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            Serial1.write((uint8_t *)buf, len);
+            Serial1.flush();
+            xSemaphoreGive(serial1Mutex);
+            return true;
+        }
         Serial1.write((uint8_t *)buf, len);
         return true;
     }
