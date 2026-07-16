@@ -1018,60 +1018,60 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
     if (isMouseData && has_data)
     {
         static uint8_t last_buttons = 0;
-        hid_mouse_report_t report = {};
-        report.buttons = localBuffer[usbHost->HIDReportDesc.buttonStartByte];
+        uint8_t buttons = localBuffer[usbHost->HIDReportDesc.buttonStartByte];
+        int16_t mouseX = 0, mouseY = 0;
+        int8_t mouseWheel = 0;
 
         if (usbHost->HIDReportDesc.xAxisSize == 12 && usbHost->HIDReportDesc.yAxisSize == 12)
         {
             uint8_t xyOffset = usbHost->HIDReportDesc.xAxisStartByte;
-            int16_t xValue = (localBuffer[xyOffset]) |
-                             ((localBuffer[xyOffset + 1] & 0x0F) << 8);
-            int16_t yValue = ((localBuffer[xyOffset + 1] >> 4) & 0x0F) |
-                             (localBuffer[xyOffset + 2] << 4);
-            if (xValue & 0x800) xValue |= 0xF000;
-            if (yValue & 0x800) yValue |= 0xF000;
-
-            report.x = xValue;
-            report.y = yValue;
-            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
-            report.wheel = (int8_t)localBuffer[wheelOffset];
+            mouseX = (localBuffer[xyOffset]) |
+                     ((localBuffer[xyOffset + 1] & 0x0F) << 8);
+            mouseY = ((localBuffer[xyOffset + 1] >> 4) & 0x0F) |
+                     (localBuffer[xyOffset + 2] << 4);
+            if (mouseX & 0x800) mouseX |= 0xF000;
+            if (mouseY & 0x800) mouseY |= 0xF000;
+            mouseWheel = (int8_t)localBuffer[usbHost->HIDReportDesc.wheelStartByte];
         }
         else if (usbHost->HIDReportDesc.xAxisSize == 16 && usbHost->HIDReportDesc.yAxisSize == 16)
         {
             uint8_t xOffset = usbHost->HIDReportDesc.xAxisStartByte;
             uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
-            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
-
-            report.x = (int16_t)(localBuffer[xOffset] | (localBuffer[xOffset + 1] << 8));
-            report.y = (int16_t)(localBuffer[yOffset] | (localBuffer[yOffset + 1] << 8));
-            report.wheel = (int8_t)localBuffer[wheelOffset];
+            mouseX = (int16_t)(localBuffer[xOffset] | (localBuffer[xOffset + 1] << 8));
+            mouseY = (int16_t)(localBuffer[yOffset] | (localBuffer[yOffset + 1] << 8));
+            mouseWheel = (int8_t)localBuffer[usbHost->HIDReportDesc.wheelStartByte];
         }
         else
         {
             uint8_t xOffset = usbHost->HIDReportDesc.xAxisStartByte;
             uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
-            uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
-
-            report.x = (int8_t)localBuffer[xOffset];
-            report.y = (int8_t)localBuffer[yOffset];
-            report.wheel = (int8_t)localBuffer[wheelOffset];
+            mouseX = (int8_t)localBuffer[xOffset];
+            mouseY = (int8_t)localBuffer[yOffset];
+            mouseWheel = (int8_t)localBuffer[usbHost->HIDReportDesc.wheelStartByte];
         }
 
+        hid_mouse_report_t report = {
+            .buttons = buttons,
+            .x = (int8_t)mouseX,
+            .y = (int8_t)mouseY,
+            .wheel = mouseWheel,
+            .pan = 0
+        };
         usbHost->onMouse(report, last_buttons);
 
-        bool buttonsChanged = (report.buttons != last_buttons);
-        bool hasMovement = (report.x != 0 || report.y != 0 || report.wheel != 0);
+        bool buttonsChanged = (buttons != last_buttons);
+        bool hasMovement = (mouseX != 0 || mouseY != 0 || mouseWheel != 0);
 
         if (usbHost->deviceMouseReady && (buttonsChanged || hasMovement))
         {
             uint8_t packet[7] = {
                 0xAA,
-                report.buttons,
-                (uint8_t)(report.x & 0xFF),
-                (uint8_t)((report.x >> 8) & 0xFF),
-                (uint8_t)(report.y & 0xFF),
-                (uint8_t)((report.y >> 8) & 0xFF),
-                (uint8_t)report.wheel
+                buttons,
+                (uint8_t)(mouseX & 0xFF),
+                (uint8_t)((mouseX >> 8) & 0xFF),
+                (uint8_t)(mouseY & 0xFF),
+                (uint8_t)((mouseY >> 8) & 0xFF),
+                (uint8_t)mouseWheel
             };
             if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 Serial1.write(packet, 7);
@@ -1081,7 +1081,7 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
             }
         }
 
-        last_buttons = report.buttons;
+        last_buttons = buttons;
     }
     else if (isKeyboardData && has_data)
     {
