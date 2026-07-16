@@ -16,14 +16,6 @@ extern const char *commandQueue[];
 extern int currentCommandIndex;
 extern bool usbReady;
 
-// Buffer lengths
-#define MAX_SERIAL0_COMMAND_LENGTH 100
-#define MAX_SERIAL1_COMMAND_LENGTH 600
-
-// Command buffers
-extern char serial0Buffer[MAX_SERIAL0_COMMAND_LENGTH];
-extern char serial1Buffer[MAX_SERIAL1_COMMAND_LENGTH];
-
 extern std::atomic<bool> serial0Locked;
 
 // Core / infrastructure

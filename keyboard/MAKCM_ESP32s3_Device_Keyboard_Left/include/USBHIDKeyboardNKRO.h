@@ -39,7 +39,7 @@ enum ConsumerBit {
     CC_EJECT      = 9,
     CC_EMAIL      = 10,
     CC_CALC       = 11,
-    CC_BROWSER    = 12,
+    CC_AC_HOME    = 12,
     CC_AC_BACK    = 13,
     CC_AC_FORWARD = 14,
     CC_AC_SEARCH  = 15,

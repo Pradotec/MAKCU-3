@@ -7,7 +7,6 @@
 #include <esp_intr_alloc.h>
 #include <cstring>
 #include <atomic>
-#include <mutex>
 #include <RingBuf.h>
 
 // ---------------------------------------------------------------------------
@@ -23,8 +22,6 @@
 #define CC_FRAME_LEN    3                         // marker + cc_lo + cc_hi
 
 std::atomic<bool> serial0Locked(true);
-
-std::mutex commandMutex;
 
 volatile bool deviceConnected = false;
 bool usbReady = false;
