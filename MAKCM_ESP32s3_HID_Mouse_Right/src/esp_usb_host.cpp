@@ -517,6 +517,9 @@ void EspUsbHost::_clientEventCallback(const usb_host_client_event_msg_t *eventMs
         if (dev_desc->bDeviceClass == 0x09)
         {
             usbHost->hubCount++;
+            if (usbHost->firstDeviceOpenTime == 0) {
+                usbHost->firstDeviceOpenTime = millis();
+            }
             ESP_LOGI("EspUsbHost", "Hub detected (VID=0x%04X PID=0x%04X), skipping identity clone (count=%d, hubs=%d)",
                      dev_desc->idVendor, dev_desc->idProduct, usbHost->openDeviceCount, usbHost->hubCount);
             break;
