@@ -50,6 +50,10 @@ USBHIDMouse16::USBHIDMouse16() : hid(), _buttons(0) {
 
 void USBHIDMouse16::begin() {
     hid.addDevice(this, sizeof(mouse16_report_descriptor));
+    // Creates the shared TX semaphore/mutex required by USBHID::SendReport.
+    // Idempotent (guards on NULL) and independent of any other HID device
+    // also calling begin().
+    hid.begin();
 }
 
 void USBHIDMouse16::end() {
