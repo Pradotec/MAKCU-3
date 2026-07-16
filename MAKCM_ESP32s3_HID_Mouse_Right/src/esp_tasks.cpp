@@ -153,7 +153,6 @@ bool EspUsbHost::serial1Send(const char *format, ...)
     {
         if (serial1Mutex && xSemaphoreTake(serial1Mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             Serial1.write((uint8_t *)buf, len);
-            Serial1.flush();
             xSemaphoreGive(serial1Mutex);
             return true;
         }

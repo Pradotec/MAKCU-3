@@ -23,8 +23,8 @@ void setup()
   delay(1000);
   pinMode(9, OUTPUT);
   usbHost.begin();
-  Serial0.println("RIGHT: MCU Started - V1_5_fix_prefix_loss");
-  Serial1.println("MAKCK V1_5_fix_prefix_loss");
+  Serial0.println("RIGHT: MCU Started - V1_6_fix_polling_rate");
+  Serial1.println("MAKCK V1_6_fix_polling_rate");
   burn_usb_phy_sel_efuse();
 }
 

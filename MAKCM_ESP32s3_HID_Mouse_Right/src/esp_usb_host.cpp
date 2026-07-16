@@ -951,18 +951,48 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
         return;
     }
 
+    // Copy transfer data and resubmit immediately so the USB host controller
+    // queues the next poll within the current 1ms frame (preserves 1000Hz)
+    uint8_t localBuffer[64];
+    int actualBytes = transfer->actual_num_bytes;
+    usb_device_handle_t deviceHandle = transfer->device_handle;
+    usb_transfer_status_t xferStatus = transfer->status;
+    uint8_t endpointAddr = transfer->bEndpointAddress;
+
+    if (actualBytes > 0 && actualBytes <= (int)sizeof(localBuffer))
+    {
+        memcpy(localBuffer, transfer->data_buffer, actualBytes);
+    }
+    else
+    {
+        actualBytes = 0;
+    }
+
+    if (!usbHost->deviceSuspended)
+    {
+        esp_err_t err = usb_host_transfer_submit(transfer);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("EspUsbHost", "Failed to resubmit transfer: err=0x%x, Endpoint=0x%x", err, endpointAddr);
+        }
+    }
+    else
+    {
+        usb_host_transfer_free(transfer);
+    }
+
     if (usbHost->debugModeActive)
     {
         static unsigned long lastLogTime = 0;
         unsigned long currentTime = millis();
         if (currentTime - lastLogTime >= 250)
         {
-            usbHost->logRawBytes("EspUsbHost::_onReceive", transfer->data_buffer, transfer->actual_num_bytes);
+            usbHost->logRawBytes("EspUsbHost::_onReceive", localBuffer, actualBytes);
             lastLogTime = currentTime;
         }
     }
 
-    bool has_data = (transfer->actual_num_bytes > 0);
+    bool has_data = (actualBytes > 0);
 
     if (has_data)
     {
@@ -976,33 +1006,33 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
 
     if (usbHost->debugModeActive)
     {
-        ESP_LOGI("EspUsbHost", "Received HID report: %d bytes", transfer->actual_num_bytes);
-        usbHost->logRawBytes("EspUsbHost::_onReceive HID Report", transfer->data_buffer, transfer->actual_num_bytes);
+        ESP_LOGI("EspUsbHost", "Received HID report: %d bytes", actualBytes);
+        usbHost->logRawBytes("EspUsbHost::_onReceive HID Report", localBuffer, actualBytes);
     }
 
-    bool isMouseData = (usbHost->mouseDeviceHandle != NULL && transfer->device_handle == usbHost->mouseDeviceHandle);
-    bool isKeyboardData = (usbHost->keyboardDeviceHandle != NULL && transfer->device_handle == usbHost->keyboardDeviceHandle);
+    bool isMouseData = (usbHost->mouseDeviceHandle != NULL && deviceHandle == usbHost->mouseDeviceHandle);
+    bool isKeyboardData = (usbHost->keyboardDeviceHandle != NULL && deviceHandle == usbHost->keyboardDeviceHandle);
 
     if (isMouseData && has_data)
     {
         static uint8_t last_buttons = 0;
         hid_mouse_report_t report = {};
-        report.buttons = transfer->data_buffer[usbHost->HIDReportDesc.buttonStartByte];
+        report.buttons = localBuffer[usbHost->HIDReportDesc.buttonStartByte];
 
         if (usbHost->HIDReportDesc.xAxisSize == 12 && usbHost->HIDReportDesc.yAxisSize == 12)
         {
             uint8_t xyOffset = usbHost->HIDReportDesc.xAxisStartByte;
-            int16_t xValue = (transfer->data_buffer[xyOffset]) |
-                             ((transfer->data_buffer[xyOffset + 1] & 0x0F) << 8);
-            int16_t yValue = ((transfer->data_buffer[xyOffset + 1] >> 4) & 0x0F) |
-                             (transfer->data_buffer[xyOffset + 2] << 4);
+            int16_t xValue = (localBuffer[xyOffset]) |
+                             ((localBuffer[xyOffset + 1] & 0x0F) << 8);
+            int16_t yValue = ((localBuffer[xyOffset + 1] >> 4) & 0x0F) |
+                             (localBuffer[xyOffset + 2] << 4);
             if (xValue & 0x800) xValue |= 0xF000;
             if (yValue & 0x800) yValue |= 0xF000;
 
             report.x = xValue;
             report.y = yValue;
             uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
-            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+            report.wheel = (int8_t)localBuffer[wheelOffset];
         }
         else if (usbHost->HIDReportDesc.xAxisSize == 16 && usbHost->HIDReportDesc.yAxisSize == 16)
         {
@@ -1010,9 +1040,9 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
             uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
             uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
 
-            report.x = (int16_t)(transfer->data_buffer[xOffset] | (transfer->data_buffer[xOffset + 1] << 8));
-            report.y = (int16_t)(transfer->data_buffer[yOffset] | (transfer->data_buffer[yOffset + 1] << 8));
-            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+            report.x = (int16_t)(localBuffer[xOffset] | (localBuffer[xOffset + 1] << 8));
+            report.y = (int16_t)(localBuffer[yOffset] | (localBuffer[yOffset + 1] << 8));
+            report.wheel = (int8_t)localBuffer[wheelOffset];
         }
         else
         {
@@ -1020,9 +1050,9 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
             uint8_t yOffset = usbHost->HIDReportDesc.yAxisStartByte;
             uint8_t wheelOffset = usbHost->HIDReportDesc.wheelStartByte;
 
-            report.x = (int8_t)transfer->data_buffer[xOffset];
-            report.y = (int8_t)transfer->data_buffer[yOffset];
-            report.wheel = (int8_t)transfer->data_buffer[wheelOffset];
+            report.x = (int8_t)localBuffer[xOffset];
+            report.y = (int8_t)localBuffer[yOffset];
+            report.wheel = (int8_t)localBuffer[wheelOffset];
         }
 
         usbHost->onMouse(report, last_buttons);
@@ -1038,33 +1068,19 @@ void EspUsbHost::_onReceive(usb_transfer_t *transfer)
     }
     else if (isKeyboardData && has_data)
     {
-        usbHost->onKeyboard(transfer->data_buffer, transfer->actual_num_bytes);
+        usbHost->onKeyboard(localBuffer, actualBytes);
     }
 
-    if (transfer->status != USB_TRANSFER_STATUS_COMPLETED)
+    if (xferStatus != USB_TRANSFER_STATUS_COMPLETED)
     {
-        if (transfer->status == USB_TRANSFER_STATUS_STALL)
+        if (xferStatus == USB_TRANSFER_STATUS_STALL)
         {
-            ESP_LOGW("EspUsbHost", "Transfer STALL: Endpoint=0x%x", transfer->bEndpointAddress);
+            ESP_LOGW("EspUsbHost", "Transfer STALL: Endpoint=0x%x", endpointAddr);
         }
         else
         {
-            ESP_LOGE("EspUsbHost", "Transfer error: Status=0x%x, Endpoint=0x%x", transfer->status, transfer->bEndpointAddress);
+            ESP_LOGE("EspUsbHost", "Transfer error: Status=0x%x, Endpoint=0x%x", xferStatus, endpointAddr);
         }
-    }
-
-    // Resubmit the transfer if the device is not suspended
-    if (!usbHost->deviceSuspended)
-    {
-        esp_err_t err = usb_host_transfer_submit(transfer);
-        if (err != ESP_OK)
-        {
-            ESP_LOGE("EspUsbHost", "Failed to resubmit transfer: err=0x%x, Endpoint=0x%x", err, transfer->bEndpointAddress);
-        }
-    }
-    else
-    {
-        usb_host_transfer_free(transfer);
     }
 }
 
