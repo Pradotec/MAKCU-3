@@ -1,0 +1,27 @@
+# ===========================================================================
+# MAKCM Right MCU — hub-enabled USB host (ESP-IDF v5.5.x, target esp32s3)
+# These defaults are applied on a fresh build / `idf.py reconfigure`.
+# ===========================================================================
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# --- External USB hub support -------------------------------------------------
+# THE flag that makes devices behind an external hub enumerate. Default is OFF,
+# which is exactly why this is impossible on stock Arduino (precompiled libs).
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+# Only needed for a hub plugged into another hub. Default-on once hubs are
+# enabled; kept explicit for clarity. Not required for one hub + mouse + keyboard.
+CONFIG_USB_HOST_HUB_MULTI_LEVEL=y
+
+# --- USB host misc ------------------------------------------------------------
+# Bump the control-transfer buffer for compound devices with big config
+# descriptors (harmless for simple HID). Leave at 256 if you prefer the default.
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=512
+
+# --- Timing -------------------------------------------------------------------
+# 1 kHz tick so vTaskDelay/notify granularity matches 1 ms USB frames.
+CONFIG_FREERTOS_HZ=1000
+
+# --- Optional: keep the task watchdog from tripping during bring-up ----------
+# (Re-enable once the firmware is stable.)
+CONFIG_ESP_TASK_WDT_INIT=n

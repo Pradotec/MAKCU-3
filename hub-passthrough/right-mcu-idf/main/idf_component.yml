@@ -1,0 +1,6 @@
+## Managed component dependencies (pulled by `idf.py` from the ESP registry).
+## The USB Host Library itself (usb/usb_host.h) is built into ESP-IDF 5.5 — no
+## extra component needed for it. Only the HID host class driver is external.
+dependencies:
+  idf: ">=5.5"
+  espressif/usb_host_hid: "^1.2.0"

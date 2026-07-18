@@ -106,18 +106,22 @@ The decisive flags (full file in the skeleton):
 ```ini
 CONFIG_IDF_TARGET="esp32s3"
 
-# --- External USB hub support (THE enabling flags) ---
-CONFIG_USB_HOST_HUBS_SUPPORTED=y
-CONFIG_USB_HOST_HUB_MULTI_LEVEL=y
-
-# USB host must have enough channels/transfers for hub + 2 devices.
-# (See skeleton for the exact CONFIG_USB_HOST_* budget values.)
+# --- External USB hub support ---
+CONFIG_USB_HOST_HUBS_SUPPORTED=y      # THE required flag (devices behind a hub)
+CONFIG_USB_HOST_HUB_MULTI_LEVEL=y     # only for hub-behind-hub; default-on, harmless
 ```
 
-`CONFIG_USB_HOST_HUB_MULTI_LEVEL` is default-on once hubs are enabled; listed
-explicitly for clarity. The channel/transfer budget matters: the docs warn each
-downstream device needs a vacant host channel, so hub + mouse + keyboard must fit
-within the S3 OTG channel count.
+Only `CONFIG_USB_HOST_HUBS_SUPPORTED=y` is strictly required — the official HID-host
+example's entire `sdkconfig.defaults` is that one line. `CONFIG_USB_HOST_HUB_MULTI_LEVEL`
+concerns **cascaded** hubs (a hub plugged into a hub), not one hub carrying two
+devices; it defaults to `y` anyway.
+
+There is **no USB-host channel-count config** in ESP-IDF 5.5 — the S3's USB-DWC core
+has **8 host channels in hardware**, and hub + mouse + keyboard uses only a few, so
+there is nothing to raise. The only loosely related tunable is
+`CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE` (default 256); bump to 512 only if a
+device's config descriptor exceeds 256 bytes (rare). USB-OTG host mode needs no
+switch — calling `usb_host_install()` puts the OTG controller in host mode.
 
 ---
 
