@@ -43,14 +43,35 @@ firmware. Read the plan first.
 
 ## Build & flash
 
+### Option A — PlatformIO (recommended; verified building)
+
+This project ships a `platformio.ini` using the **pioarduino** platform, which
+provides **ESP-IDF 5.5.4** and, crucially, builds `framework = espidf` **from source**
+so the hub flag in `sdkconfig.defaults` takes effect. It reuses an existing PlatformIO
+install (its own Python) — no native ESP-IDF setup needed.
+
 ```bash
-cd hub-passthrough/right-mcu-idf
-idf.py set-target esp32s3
-idf.py build
-idf.py -p <PORT> flash monitor      # e.g. -p /dev/ttyACM0  or  -p COM7
+# from this folder:
+pio run                              # first run downloads IDF 5.5.4 toolchain (~1 GB, one-time)
+pio run -t upload                    # flash (add --upload-port COMx if not auto-detected)
+pio device monitor -b 115200         # serial log
 ```
 
-The first `idf.py build` downloads the `espressif/usb_host_hid` managed component
+Verified: compiles cleanly, and the generated `sdkconfig.right_hub` contains
+`CONFIG_USB_HOST_HUBS_SUPPORTED=y`.
+
+### Option B — native ESP-IDF
+
+Requires **ESP-IDF v5.5.x** installed and exported. The `main/` + top-level
+`CMakeLists.txt` layout is also a standard native project:
+
+```bash
+idf.py set-target esp32s3
+idf.py build
+idf.py -p <PORT> flash monitor
+```
+
+Either way, the first build downloads the `espressif/usb_host_hid` managed component
 automatically (from `main/idf_component.yml`).
 
 ## Wiring / hardware notes

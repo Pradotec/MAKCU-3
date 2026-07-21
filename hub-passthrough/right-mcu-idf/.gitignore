@@ -1,0 +1,8 @@
+# PlatformIO / ESP-IDF build outputs
+.pio/
+managed_components/
+dependencies.lock
+sdkconfig.right_hub
+sdkconfig.*.old
+build-*.txt
+CMakeCache.txt
